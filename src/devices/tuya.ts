@@ -14491,7 +14491,18 @@ export const definitions: DefinitionWithExtend[] = [
         model: "QS-Zigbee-SEC01-DC",
         vendor: "Tuya",
         description: "Mini 1 Gang Zigbee Switch Module",
-        extend: [tuya.modernExtend.tuyaBase(), tuya.modernExtend.tuyaOnOff({switchType: true})],
+        extend: [
+            tuya.modernExtend.tuyaBase(),
+            tuya.modernExtend.tuyaOnOff({powerOutageMemory: true}),
+            m.enumLookup({
+                name: "switch_type",
+                lookup: {momentary: 0, toggle: 1, state: 2},
+                cluster: "genOnOff",
+                attribute: {ID: 0x8001, type: DataType.ENUM8},
+                zigbeeCommandOptions: {manufacturerCode: 0x1141},
+                description: "External switch type",
+            }),
+        ],
         configure: async (device, coordinatorEndpoint) => {
             await reporting.bind(device.getEndpoint(1), coordinatorEndpoint, ["genOnOff"]);
             device.powerSource = "Mains (single phase)";
@@ -26879,5 +26890,44 @@ export const definitions: DefinitionWithExtend[] = [
                 ],
             ],
         },
+    },
+    {
+        fingerprint: tuya.fingerprint("TS000F", ["_TZ3218_n0jsuogs"]),
+        model: "ZRM01",
+        vendor: "Novato",
+        description: "Smart relay 1 channel",
+        extend: [
+            tuya.modernExtend.tuyaBase(),
+            tuya.modernExtend.tuyaOnOff({powerOutageMemory: true}),
+            m.enumLookup({
+                name: "switch_type",
+                lookup: {momentary: 0, toggle: 1, state: 2},
+                cluster: "genOnOff",
+                attribute: {ID: 0x8001, type: DataType.ENUM8},
+                zigbeeCommandOptions: {manufacturerCode: 0x1141},
+                description: "External switch type",
+            }),
+        ],
+    },
+    {
+        fingerprint: tuya.fingerprint("TS000F", ["_TZ3218_sgbsg6mr"]),
+        model: "ZRM02",
+        vendor: "Novato",
+        description: "Smart relay 2 channel",
+        endpoint: (device) => ({l1: 1, l2: 2}),
+        meta: {multiEndpoint: true},
+        extend: [
+            tuya.modernExtend.tuyaBase(),
+            tuya.modernExtend.tuyaOnOff({powerOutageMemory: true, endpoints: ["l1", "l2"]}),
+            m.enumLookup({
+                name: "switch_type",
+                lookup: {momentary: 0, toggle: 1, state: 2},
+                cluster: "genOnOff",
+                attribute: {ID: 0x8001, type: DataType.ENUM8},
+                zigbeeCommandOptions: {manufacturerCode: 0x1141},
+                description: "External switch type (shared between channels)",
+                endpointName: "l1",
+            }),
+        ],
     },
 ];
