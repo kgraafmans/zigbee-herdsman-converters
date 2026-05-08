@@ -13035,17 +13035,8 @@ export const definitions: DefinitionWithExtend[] = [
         ],
     },
     {
-        fingerprint: tuya.fingerprint("TS1201", [
-            "_TZ3290_7v1k4vufotpowp9z",
-            "_TZ3290_rlkmy85q4pzoxobl",
-            "_TZ3290_jxvzqatwgsaqzx1u",
-            "_TZ3290_lypnqvlem5eq1ree",
-            "_TZ3290_uc8lwbi2",
-            "_TZ3290_nba3knpsarkawgnt",
-            "_TZ3290_8xzb2ghn",
-            "_TZ3290_s6ezpa3j",
-            "_TZ3290_yac64inudpovoaba",
-        ]),
+        // These models are without battery. Add battery variants to WMUN ZS05.
+        zigbeeModel: ["TS1201"],
         model: "ZS06",
         vendor: "Tuya",
         description: "Universal smart IR remote control",
@@ -13067,6 +13058,7 @@ export const definitions: DefinitionWithExtend[] = [
             tuya.whitelabel("Zemismart", "ZM-18-USB", "Universal smart IR remote control", ["_TZ3290_uc8lwbi2"]),
             tuya.whitelabel("Zemismart", "ZXMIR-02", "Universal smart IR remote control", ["_TZ3290_8xzb2ghn"]),
             tuya.whitelabel("Ekaza", "EKAT-T304Z", "Universal smart IR remote control", ["_TZ3290_s6ezpa3j"]),
+            tuya.whitelabel("Aubess", "ZXZIR-02", "Universal smart IR remote control", ["_TZ3290_acv1iuslxi3shaaj"]),
         ],
     },
     {
