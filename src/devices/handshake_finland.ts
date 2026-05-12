@@ -1,7 +1,7 @@
 import {deviceEndpoints, light} from "../lib/modernExtend";
-import type {Definition} from "../lib/types";
+import type {DefinitionWithExtend} from "../lib/types";
 
-const definitions: Definition[] = [
+const definitions: DefinitionWithExtend[] = [
     {
         zigbeeModel: ["AGGE Zigbee 2 gang smart push dimmer"],
         model: "2619839",
