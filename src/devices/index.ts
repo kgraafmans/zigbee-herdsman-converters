@@ -15,7 +15,6 @@ import {definitions as amina} from "./amina";
 import {definitions as anchor} from "./anchor";
 import {definitions as atlantic} from "./atlantic";
 import {definitions as atsmart} from "./atsmart";
-import {definitions as aubess} from "./aubess";
 import {definitions as auroraLighting} from "./aurora_lighting";
 import {definitions as automaton} from "./automaton";
 import {definitions as avatto} from "./avatto";
@@ -56,6 +55,7 @@ import {definitions as currentProductsCorp} from "./current_products_corp";
 import {definitions as customDevicesDiy} from "./custom_devices_diy";
 import {definitions as cwd} from "./cwd";
 import {definitions as cyLighting} from "./cy_lighting";
+import {definitions as daewoo} from "./daewoo";
 import {definitions as danalock} from "./danalock";
 import {definitions as danfoss} from "./danfoss";
 import {definitions as databyte} from "./databyte";
@@ -87,6 +87,7 @@ import {definitions as enbrighten} from "./enbrighten";
 import {definitions as engo} from "./engo";
 import {definitions as enkin} from "./enkin";
 import {definitions as enocean} from "./enocean";
+import {definitions as ensystec} from "./ensystec";
 import {definitions as envilar} from "./envilar";
 import {definitions as espressif} from "./espressif";
 import {definitions as essentialb} from "./essentialb";
@@ -390,7 +391,6 @@ const definitions: DefinitionWithExtend[] = [
     ...anchor,
     ...atlantic,
     ...atsmart,
-    ...aubess,
     ...auroraLighting,
     ...automaton,
     ...avatto,
@@ -432,6 +432,7 @@ const definitions: DefinitionWithExtend[] = [
     ...cwd,
     ...cyLighting,
     ...danalock,
+    ...daewoo,
     ...danfoss,
     ...databyte,
     ...datek,
@@ -461,6 +462,7 @@ const definitions: DefinitionWithExtend[] = [
     ...enbrighten,
     ...enkin,
     ...enocean,
+    ...ensystec,
     ...envilar,
     ...espressif,
     ...essentialb,

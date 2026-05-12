@@ -344,6 +344,7 @@ export const definitions: DefinitionWithExtend[] = [
         model: "EMIZB-132",
         vendor: "Develco",
         description: "Wattle AMS HAN power-meter sensor",
+        version: "0.0.1",
         ota: true,
         extend: [
             develcoModernExtend.addCustomDevelcoSeMeteringCluster(),
@@ -356,6 +357,7 @@ export const definitions: DefinitionWithExtend[] = [
                 description: "Total active power.",
                 unit: "W",
                 access: "STATE_GET",
+                reporting: {min: 5, max: "1_HOUR", change: 1},
             }),
             m.numeric<"haElectricalMeasurement", undefined>({
                 name: "power_reactive",
@@ -364,6 +366,7 @@ export const definitions: DefinitionWithExtend[] = [
                 description: "Total reactive power.",
                 unit: "VAr",
                 access: "STATE_GET",
+                reporting: {min: 5, max: "1_HOUR", change: 1},
             }),
             m.enumLookup<"seMetering", DevelcoSeMetering>({
                 name: "interface_mode",
@@ -386,6 +389,7 @@ export const definitions: DefinitionWithExtend[] = [
                 current: {divisor: 10},
                 threePhase: true,
                 energy: {divisor: 1000, multiplier: 1},
+                producedEnergy: {divisor: 1000, multiplier: 1},
                 fzMetering: develco.fz.metering_emizb132,
                 fzElectricalMeasurement: develco.fz.electrical_measurement_emizb132,
             }),

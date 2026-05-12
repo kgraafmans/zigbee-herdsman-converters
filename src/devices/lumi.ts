@@ -60,6 +60,12 @@ const {
     lumiPreventLeave,
     lumiExternalSensor,
     w600ExternalTempSensor,
+    w600Heartbeat,
+    w600PresetTemperatureTable,
+    w600Schedule,
+    w600Thermostat,
+    w600ValvePosition,
+    w600WeeklySchedule,
     lumiReadPositionOnReport,
 } = lumi.modernExtend;
 
@@ -5546,28 +5552,55 @@ export const definitions: DefinitionWithExtend[] = [
         model: "WT-A03E",
         vendor: "Aqara",
         description: "Radiator thermostat W600",
+        meta: {
+            overrideHaDiscoveryPayload: (payload) => {
+                if (payload.mode_command_topic?.endsWith("/system_mode")) {
+                    payload.mode_state_template =
+                        "{% if value_json is defined and value_json.system_mode is defined and value_json.system_mode in ['off', 'heat', 'auto'] %}" +
+                        "{{ value_json.system_mode }}" +
+                        "{% else %}off{% endif %}";
+                    payload.preset_mode_value_template =
+                        "{% if value_json is defined and value_json.preset is defined and value_json.preset in ['home', 'away', 'sleep', 'vacation', 'wind_down'] %}" +
+                        "{{ value_json.preset }}" +
+                        "{% else %}none{% endif %}";
+                    payload.temperature_state_template =
+                        "{% if value_json is defined and value_json.occupied_heating_setpoint is defined and value_json.occupied_heating_setpoint is not none %}" +
+                        "{{ value_json.occupied_heating_setpoint }}" +
+                        "{% else %}None{% endif %}";
+                    payload.current_temperature_template =
+                        "{% if value_json is defined and value_json.local_temperature is defined and value_json.local_temperature is not none %}" +
+                        "{{ value_json.local_temperature }}" +
+                        "{% else %}None{% endif %}";
+                }
+
+                if (typeof payload.value_template === "string" && payload.value_template.includes("value_json.override_active")) {
+                    payload.icon = "mdi:cursor-pointer";
+                }
+
+                if (typeof payload.value_template === "string" && payload.value_template.includes("value_json.schedule_upload_status")) {
+                    payload.icon = "mdi:upload-multiple";
+                }
+
+                if (typeof payload.value_template === "string" && payload.value_template.includes("value_json.calibrated")) {
+                    payload.icon = "mdi:tune";
+                }
+            },
+        },
         extend: [
             lumi.modernExtend.addManuSpecificLumiCluster(),
-            m.thermostat({
-                setpoints: {
-                    values: {occupiedHeatingSetpoint: {min: 5, max: 30, step: 0.5}},
-                },
-                localTemperatureCalibration: {values: {min: -5, max: 5, step: 0.1}},
-                temperatureSetpointHold: true,
-                temperatureSetpointHoldDuration: true,
-                setpointsLimit: {
-                    maxHeatSetpointLimit: {min: 5, max: 30, step: 0.5},
-                    minHeatSetpointLimit: {min: 5, max: 30, step: 0.5},
-                },
-            }),
+            m.customTimeResponse("2000_LOCAL"),
+            w600Heartbeat(),
+            w600Thermostat(),
             w600ExternalTempSensor(),
             m.enumLookup<"manuSpecificLumi", ManuSpecificLumi>({
                 name: "calibrate",
                 lookup: {start: 1},
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0270, type: Zcl.DataType.UINT8},
-                description: "Calibrates the valve",
-                access: "ALL",
+                description: "Start valve calibration",
+                access: "SET",
+                label: "Calibrate",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
             m.enumLookup<"manuSpecificLumi", ManuSpecificLumi>({
@@ -5575,28 +5608,22 @@ export const definitions: DefinitionWithExtend[] = [
                 lookup: {not_ready: 0, ready: 1, error: 2, in_progress: 3},
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x027b, type: Zcl.DataType.UINT8},
-                description: "State of calibrate",
+                description: "Valve calibration state",
                 access: "STATE_GET",
+                label: "Calibration status",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
             m.binary<"manuSpecificLumi", ManuSpecificLumi>({
-                name: "state",
-                valueOn: ["ON", 1],
-                valueOff: ["OFF", 0],
-                cluster: "manuSpecificLumi",
-                attribute: {ID: 0x0271, type: 0x20},
-                description: "Enabling termostat",
-                access: "ALL",
-                zigbeeCommandOptions: {manufacturerCode},
-            }),
-            m.binary<"manuSpecificLumi", ManuSpecificLumi>({
-                name: "valve_detection",
+                name: "temperature_control_abnormal_notification",
                 valueOn: ["ON", 1],
                 valueOff: ["OFF", 0],
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0274, type: 0x20},
-                description: "Determines if temperature control abnormalities should be detected",
+                description:
+                    "Enable or disable reporting of abnormal temperature control status. When enabled, the valve alarm is set to true if an abnormality is detected",
                 access: "ALL",
+                label: "Temperature control abnormal notification",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
             m.binary<"manuSpecificLumi", ManuSpecificLumi>({
@@ -5605,28 +5632,23 @@ export const definitions: DefinitionWithExtend[] = [
                 valueOff: ["OFF", 0],
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0330, type: 0x20},
-                description: "Display flip",
+                description: "Flip the display orientation",
                 access: "ALL",
+                label: "Display flip",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
-            m.binary<"manuSpecificLumi", ManuSpecificLumi>({
-                name: "helper",
-                valueOn: ["ON", 1],
-                valueOff: ["OFF", 0],
-                cluster: "manuSpecificLumi",
-                attribute: {ID: 0x027d, type: 0x20},
-                description: "Schedule helper",
-                access: "ALL",
-                zigbeeCommandOptions: {manufacturerCode},
-            }),
+            w600Schedule(),
             m.binary<"manuSpecificLumi", ManuSpecificLumi>({
                 name: "window_detection",
                 valueOn: ["ON", 1],
                 valueOff: ["OFF", 0],
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0273, type: 0x20},
-                description: "Enables/disables window detection on the device",
+                description: "Enable or disable open window detection. When enabled, the window_open is set to true if an open window is detected",
                 access: "ALL",
+                label: "Open window detection",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
             m.binary<"manuSpecificLumi", ManuSpecificLumi>({
@@ -5635,35 +5657,29 @@ export const definitions: DefinitionWithExtend[] = [
                 valueOff: ["UNLOCK", 0],
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0277, type: 0x20},
-                description: "Enables/disables physical input on the device",
+                description: "Lock or unlock the physical controls on the device",
                 access: "ALL",
+                label: "Child lock",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
             m.numeric<"manuSpecificLumi", ManuSpecificLumi>({
-                name: "away_preset_temperature",
-                valueMin: 0,
-                valueMax: 30,
+                name: "anti_freeze_temperature",
+                valueMin: 5,
+                valueMax: 15,
                 valueStep: 0.5,
                 scale: 100,
                 unit: "°C",
                 cluster: "manuSpecificLumi",
                 attribute: {ID: 0x0279, type: Zcl.DataType.UINT32},
-                description: "Away preset temperature",
+                description:
+                    "Minimum temperature limit for frost protection. Turns the thermostat on regardless of setpoint if the temperature drops below this.",
+                entityCategory: "config",
                 zigbeeCommandOptions: {manufacturerCode},
             }),
-            m.numeric<"manuSpecificLumi", ManuSpecificLumi>({
-                name: "position",
-                valueMin: 0,
-                valueMax: 100,
-                scale: 1,
-                precision: 2,
-                unit: "%",
-                access: "STATE_GET",
-                cluster: "manuSpecificLumi",
-                attribute: {ID: 0x0360, type: Zcl.DataType.SINGLE_PREC},
-                description: "Position of the valve, 100% is fully open",
-                zigbeeCommandOptions: {manufacturerCode},
-            }),
+            w600PresetTemperatureTable(),
+            w600WeeklySchedule(),
+            w600ValvePosition(),
             m.identify(),
             lumiZigbeeOTA(),
         ],
@@ -5997,5 +6013,54 @@ export const definitions: DefinitionWithExtend[] = [
             m.quirkCheckinInterval("1_HOUR"),
             lumi.lumiModernExtend.lumiZigbeeOTA(),
         ],
+    },
+    {
+        zigbeeModel: ["aqara.toilet.acn002", "lumi.sen_gas.hrcn01"], // The reason for adding lumi.sen_gas.hrcn01 is that the model number reported by a toilet is exactly this
+        model: "ACN002",
+        vendor: "Aqara",
+        description: "Smart Toilet T1",
+        fromZigbee: [lumi.fromZigbee.lumi_toilet],
+        toZigbee: [lumi.toZigbee.lumi_toilet],
+        exposes: [
+            e.binary("lid_switch", ea.STATE_SET, "OPEN", "CLOSE").withDescription("Lid status"),
+            e.binary("seat_switch", ea.STATE_SET, "OPEN", "CLOSE").withDescription("Seat status"),
+            e.binary("night_light", ea.STATE_SET, "ON", "OFF").withDescription("Night light"),
+            e
+                .enum("seat_temp", ea.STATE_SET, ["Off", "Temp_31C", "Temp_33C", "Temp_35C", "Temp_37C", "Temp_39C"])
+                .withDescription("Seat heating temperature"),
+            e
+                .enum("cleaning_mode", ea.STATE_SET, ["Stop", "Rear", "Rear_Moving", "Female", "Female_Moving", "Child"])
+                .withDescription("Cleaning mode"),
+            e
+                .enum("water_temp", ea.STATE_SET, ["Off", "Temp_31C", "Temp_33C", "Temp_35C", "Temp_37C", "Temp_39C"])
+                .withDescription("Cleaning water temperature"),
+            e
+                .enum("water_pressure", ea.STATE_SET, ["Weak", "Slightly_Weak", "Middle", "Slightly_Strong", "Strong"])
+                .withDescription("Water pressure"),
+            e
+                .enum("nozzle_position", ea.STATE_SET, ["Back", "Slightly_Back", "Middle", "Slightly_Front", "Front"])
+                .withDescription("Nozzle position"),
+            e
+                .enum("dryer_temp", ea.STATE_SET, ["Off", "Normal", "Low", "Mid_Low", "Middle", "Mid_High", "High"])
+                .withDescription("Dryer wind temperature"),
+            e.enum("nozzle_clean", ea.STATE_SET, ["Off", "Auto", "Manual"]).withDescription("Nozzle self-cleaning"),
+            e.binary("occupancy_status", ea.STATE, true, false).withDescription("Occupancy status"),
+            e.enum("stop_button", ea.SET, ["STOP"]).withDescription("Stop operation"),
+            e.enum("flush_big", ea.SET, ["FLUSH"]).withDescription("Full flush"),
+            e.enum("flush_small", ea.SET, ["FLUSH"]).withDescription("Small flush"),
+            e.enum("foam_shield", ea.SET, ["RELEASE"]).withDescription("Release splash-proof foam"),
+            e.binary("pre_mist_switch", ea.STATE_SET, "ON", "OFF").withDescription("Pre-mist when sitting").withCategory("config"),
+            e.binary("auto_foam_on_sit", ea.STATE_SET, "ON", "OFF").withDescription("Automatic foam when sitting").withCategory("config"),
+            e.binary("auto_foam_on_leave", ea.STATE_SET, "ON", "OFF").withDescription("Automatic foam when leaving").withCategory("config"),
+            e.binary("child_seat_mode", ea.STATE_SET, "ON", "OFF").withDescription("Child seat mode").withCategory("config"),
+            e.binary("foot_sensor_switch", ea.STATE_SET, "ON", "OFF").withDescription("Foot sensor").withCategory("config"),
+            e.binary("auto_flush_after_leave", ea.STATE_SET, "ON", "OFF").withDescription("Auto flush after leaving").withCategory("config"),
+            e.binary("beeper_switch", ea.STATE_SET, "ON", "OFF").withDescription("Beeper sound").withCategory("config"),
+        ],
+        extend: [lumi.modernExtend.addManuSpecificLumiCluster(), lumiZigbeeOTA(), m.forcePowerSource({powerSource: "Mains (single phase)"})],
+        configure: async (device, coordinatorEndpoint) => {
+            const endpoint = device.getEndpoint(1);
+            await endpoint.read<"manuSpecificLumi", ManuSpecificLumi>("manuSpecificLumi", [0xfff1], {manufacturerCode: manufacturerCode});
+        },
     },
 ];

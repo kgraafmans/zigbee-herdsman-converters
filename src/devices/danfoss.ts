@@ -1,4 +1,4 @@
-import {Zcl} from "zigbee-herdsman";
+import {getTimeClusterAttributes, Zcl} from "zigbee-herdsman";
 import * as fz from "../converters/fromZigbee";
 import * as tz from "../converters/toZigbee";
 import * as constants from "../lib/constants";
@@ -12,12 +12,22 @@ import {postfixWithEndpointName, precisionRound} from "../lib/utils";
 const e = exposes.presets;
 const ea = exposes.access;
 
-const setTime = async (device: Zh.Device) => {
+const setTime = async (device: Zh.Device, sendPolicy?: "immediate" | "queue") => {
     const endpoint = device.getEndpoint(1);
-    const time = Math.round((Date.now() - constants.OneJanuary2000) / 1000);
-    // Time-master + synchronised
-    const values = {timeStatus: 1, time: time, timeZone: new Date().getTimezoneOffset() * -1 * 60};
-    await endpoint.write("genTime", values);
+    const {time, timeZone, dstStart, dstEnd, dstShift} = getTimeClusterAttributes();
+
+    await endpoint.write(
+        "genTime",
+        {
+            time,
+            timeStatus: 0x02, // bit 1 = synchronized (per Danfoss spec §1.2)
+            timeZone,
+            dstStart,
+            dstEnd,
+            dstShift,
+        },
+        sendPolicy ? {sendPolicy} : undefined,
+    );
 };
 
 interface DanfossHvacThermostat {
@@ -57,6 +67,10 @@ interface DanfossHvacThermostat {
         danfossSetpointCommand: {
             setpointType: number;
             setpoint: number;
+        };
+        danfossPreHeatCommand: {
+            type: number;
+            timestamp: number;
         };
     };
     commandResponses: never;
@@ -331,6 +345,14 @@ const danfossExtend = {
                         {name: "setpoint", type: Zcl.DataType.INT16, min: -32768, max: 32767},
                     ],
                 },
+                danfossPreHeatCommand: {
+                    name: "danfossPreHeatCommand",
+                    ID: 0x42,
+                    parameters: [
+                        {name: "type", type: Zcl.DataType.ENUM8, max: 0xff},
+                        {name: "timestamp", type: Zcl.DataType.UINT32},
+                    ],
+                },
             },
             commandsResponse: {},
         }),
@@ -469,7 +491,7 @@ const danfossExtend = {
         }),
     danfossThermostatOrientation: (args?: Partial<m.BinaryArgs<"hvacThermostat", DanfossHvacThermostat>>) =>
         m.binary<"hvacThermostat", DanfossHvacThermostat>({
-            name: "thermostat_vertical_orientation",
+            name: "thermostat_orientation",
             cluster: "hvacThermostat",
             attribute: "danfossThermostatOrientation",
             description: "Thermostat Orientation. This is important for the PID in how it assesses temperature.",
@@ -687,7 +709,9 @@ const danfossExtend = {
             exposes: [
                 e
                     .text("trigger_time", ea.ALL)
-                    .withDescription("Exercise trigger time. Format: 'HH:MM' (e.g., '14:30'). Send 'undefined' to disable.")
+                    .withDescription(
+                        "Exercise trigger time. Format: 'HH:MM' (e.g., '14:30'). Send 'undefined' to disable. Note: during DST, the valve may exercise earlier than configured due to a firmware limitation (the TRV uses standard time instead of wall-clock time)",
+                    )
                     .withCategory("config"),
             ],
             fromZigbee: [
@@ -799,6 +823,16 @@ const danfossExtend = {
             zigbeeCommandOptions: {manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S},
             ...args,
         }),
+    danfossPreheatTime: (args?: Partial<m.NumericArgs<"hvacThermostat", DanfossHvacThermostat>>) =>
+        m.numeric<"hvacThermostat", DanfossHvacThermostat>({
+            name: "preheat_time",
+            cluster: "hvacThermostat",
+            attribute: "danfossPreheatTime",
+            description: "Timestamp of the scheduled setpoint currently being preheated to (read-only)",
+            access: "STATE_GET",
+            zigbeeCommandOptions: {manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S},
+            ...args,
+        }),
     danfossAdaptionRunStatus: (args?: Partial<m.EnumLookupArgs<"hvacThermostat", DanfossHvacThermostat>>) =>
         m.enumLookup<"hvacThermostat", DanfossHvacThermostat>({
             name: "adaptation_run_status",
@@ -835,7 +869,7 @@ const danfossExtend = {
             attribute: "danfossAdaptionRunControl",
             description: "Adaptation run control: Initiate Adaptation Run or Cancel Adaptation Run",
             lookup: {
-                none: 0,
+                idle: 0,
                 initiate_adaptation: 1,
                 cancel_adaptation: 2,
             },
@@ -931,6 +965,15 @@ const danfossExtend = {
             },
         });
 
+        extend.toZigbee.push({
+            key: ["running_state"],
+            convertGet: async (entity, key, meta) => {
+                await entity.read<"hvacThermostat", DanfossHvacThermostat>("hvacThermostat", ["danfossHeatRequired"], {
+                    manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S,
+                });
+            },
+        });
+
         extend.configure.push(
             m.setupConfigureForReading<"hvacThermostat", undefined>("hvacThermostat", ["systemMode"]),
             m.setupConfigureForReading<"hvacUserInterfaceCfg", undefined>("hvacUserInterfaceCfg", ["keypadLockout"]),
@@ -940,6 +983,16 @@ const danfossExtend = {
         );
         return extend;
     },
+    danfossTimeSyncOnAnnounce: (): ModernExtend => ({
+        isModernExtend: true,
+        onEvent: [
+            async (event) => {
+                if (event.type === "deviceAnnounce") {
+                    await setTime(event.data.device, "queue");
+                }
+            },
+        ],
+    }),
 };
 
 const tzLocal = {
@@ -1025,6 +1078,22 @@ const tzLocal = {
             await entity.read<"hvacThermostat", DanfossHvacThermostat>("hvacThermostat", ["danfossIcon2PreHeatStatus"], {
                 manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S,
             });
+        },
+    } satisfies Tz.Converter,
+    danfoss_preheat_command: {
+        key: ["preheat_command"],
+        convertSet: async (entity, key, value, meta) => {
+            utils.assertObject(value);
+            const payload = {
+                type: 0x00, // Force preheat
+                timestamp: value.timestamp,
+            };
+            await entity.command<"hvacThermostat", "danfossPreHeatCommand", DanfossHvacThermostat>(
+                "hvacThermostat",
+                "danfossPreHeatCommand",
+                payload,
+                {manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S},
+            );
         },
     } satisfies Tz.Converter,
     danfoss_system_status_code: {
@@ -1238,6 +1307,24 @@ const fzLocal = {
             return result;
         },
     } satisfies Fz.Converter<"hvacUserInterfaceCfg", DanfossHvacUserInterfaceCfg, ["attributeReport", "readResponse"]>,
+    danfoss_system_status_code: {
+        cluster: "haDiagnostic",
+        type: ["attributeReport", "readResponse"],
+        convert: (model, msg, publish, options, meta) => {
+            const result: KeyValueAny = {};
+            if (msg.data.danfossSystemStatusCode !== undefined) {
+                const code = msg.data.danfossSystemStatusCode;
+                const errors: string[] = [];
+                for (const [bit, name] of Object.entries(constants.danfossAllySystemStatusCode)) {
+                    if (code & (1 << Number(bit))) {
+                        errors.push(name);
+                    }
+                }
+                result.system_status_code = errors.length > 0 ? errors.join(",") : "ok";
+            }
+            return result;
+        },
+    } satisfies Fz.Converter<"haDiagnostic", DanfossHaDiagnostic, ["attributeReport", "readResponse"]>,
 };
 
 export const definitions: DefinitionWithExtend[] = [
@@ -1256,6 +1343,7 @@ export const definitions: DefinitionWithExtend[] = [
         extend: [
             danfossExtend.addDanfossHvacThermostatCluster(),
             danfossExtend.addDanfossHvacUserInterfaceCfgCluster(),
+            danfossExtend.addDanfossHaDiagnosticCluster(),
             danfossExtend.danfossThermostat({
                 setpoints: {values: {occupiedHeatingSetpoint: {min: 5, max: 35, step: 0.5}}},
                 piHeatingDemand: {values: true},
@@ -1294,14 +1382,51 @@ export const definitions: DefinitionWithExtend[] = [
             danfossExtend.danfossLoadRoomMean(),
             danfossExtend.danfossLoadEstimate(),
             danfossExtend.danfossPreheatStatus(),
+            danfossExtend.danfossPreheatTime(),
             danfossExtend.danfossAdaptionRunStatus(),
             danfossExtend.danfossAdaptionRunSettings(),
             danfossExtend.danfossAdaptionRunControl(),
             danfossExtend.danfossRegulationSetpointOffset(),
-            m.writeTimeDaily({endpointId: 1}),
+            danfossExtend.danfossTimeSyncOnAnnounce(),
+            m.poll({
+                key: "danfossTime",
+                defaultIntervalSeconds: 60 * 60 * 24,
+                poll: async (device) => {
+                    await setTime(device, "queue");
+                },
+            }),
         ],
-        fromZigbee: [fz.thermostat_weekly_schedule],
-        toZigbee: [tz.thermostat_clear_weekly_schedule],
+        exposes: [
+            e
+                .text("system_status_code", ea.STATE_GET)
+                .withDescription("Diagnostic error codes (e.g. 'invalid_clock_information,low_battery'). 'ok' when no errors.")
+                .withCategory("diagnostic"),
+        ],
+        fromZigbee: [fz.thermostat_weekly_schedule, fzLocal.danfoss_system_status_code],
+        toZigbee: [
+            tz.thermostat_weekly_schedule,
+            tz.thermostat_clear_weekly_schedule,
+            tzLocal.danfoss_system_status_code,
+            tzLocal.danfoss_preheat_command,
+        ],
+        configure: async (device, coordinatorEndpoint) => {
+            const endpoint = device.getEndpoint(1);
+            const options = {manufacturerCode: Zcl.ManufacturerCode.DANFOSS_A_S};
+            await reporting.bind(endpoint, coordinatorEndpoint, ["haDiagnostic"]);
+            await endpoint.configureReporting<"haDiagnostic", DanfossHaDiagnostic>(
+                "haDiagnostic",
+                [
+                    {
+                        attribute: "danfossSystemStatusCode",
+                        minimumReportInterval: 0,
+                        maximumReportInterval: constants.repInterval.HOUR,
+                        reportableChange: 1,
+                    },
+                ],
+                options,
+            );
+            await endpoint.read<"haDiagnostic", DanfossHaDiagnostic>("haDiagnostic", ["danfossSystemStatusCode"], options);
+        },
     },
     {
         fingerprint: [
